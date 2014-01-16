@@ -5,9 +5,10 @@ define([
 	"./milliseconds-in-day",
 	"./pattern-re",
 	"./start-of",
+	"./timezone/hour-format",
 	"./week-days",
 	"../util/string/pad"
-], function( dateDayOfWeek, dateDayOfYear, dateFirstDayOfWeek, dateMillisecondsInDay, datePatternRe, dateStartOf, dateWeekDays, stringPad ) {
+], function( dateDayOfWeek, dateDayOfYear, dateFirstDayOfWeek, dateMillisecondsInDay, datePatternRe, dateStartOf, dateTimezoneHourFormat, dateWeekDays, stringPad ) {
 
 /**
  * format( date, pattern, cldr )
@@ -34,6 +35,24 @@ return function( date, pattern, cldr ) {
 			// Locale preferred hHKk.
 			// http://www.unicode.org/reports/tr35/tr35-dates.html#Time_Data
 			chr = cldr.supplemental.timeData.preferred();
+		}
+
+		if ( chr === "Z" ) {
+			// Z..ZZZ: same as "xxxx".
+			if ( length < 4 ) {
+				chr = "x";
+				length = 4;
+
+			// ZZZZ: same as "OOOO".
+			} else if ( length < 5 ) {
+				chr = "O";
+				length = 4;
+
+			// ZZZZZ: same as "XXXXX"
+			} else {
+				chr = "X";
+				length = 5;
+			}
 		}
 
 		switch ( chr ) {
@@ -236,16 +255,64 @@ return function( date, pattern, cldr ) {
 				break;
 
 			// Zone
-			// see http://www.unicode.org/reports/tr35/tr35-dates.html#Using_Time_Zone_Names ?
-			// Need to be implemented.
 			case "z":
-			case "Z":
+				/*
+				ret = cldr.main([
+					"dates/timeZoneNames/metazone",
+					metaZone(), // FIXME eg. Brasilia, America_Pacific.
+					length < 4 ? "short" : "long",
+					standardOrDaylight() // FIXME eg. generic, standard, daylight
+				]);
+				// FIXME Or fallback to O or OOOO
+				*/
+				break;
+
 			case "O":
+				// O: "{gmtFormat}+H;{gmtFormat}-H" or "{gmtZeroFormat}", eg. "GMT-8" or "GMT".
+				// OOOO: "{gmtFormat}{hourFormat}" or "{gmtZeroFormat}", eg. "GMT-08:00" or "GMT".
+				if ( date.getTimezoneOffset() === 0 ) {
+					ret = cldr.main( "dates/timeZoneNames/gmtZeroFormat" );
+				} else {
+					ret = dateTimezoneHourFormat( date, length < 4 ? "+H;-H" : cldr.main( "dates/timeZoneNames/hourFormat" ) );
+					ret = cldr.main( "dates/timeZoneNames/gmtFormat" ).replace( /\{0\}/, ret );
+				}
+				break;
+
 			case "v":
+				/*
+				// FIXME: very similar with "z", except zz, zzz, and fallback.
+				ret = cldr.main([
+					"dates/timeZoneNames/metazone",
+					metaZone(), // FIXME eg. Brasilia, America_Pacific.
+					length < 4 ? "short" : "long",
+					"generic"
+				]);
+				// FIXME Or fallback to:
+				// L1: falls back to the generic location format ("VVVV"), then the short localized GMT format as the final fallback. ???? weird, check ICU.
+				// L4: falls back to generic location format ("VVVV").
+				*/
+				break;
+
 			case "V":
+				// L1: ignore
+				// L2: The long time zone ID. Needs bcp47 :-S. ignore.
+				// L3: ...
+
 			case "X":
+				// Same as x*, except it uses "Z" for zero offset.
+				if ( date.getTimezoneOffset() === 0 ) {
+					ret = "Z";
+					break;
+				}
+
+			/* falls through */
 			case "x":
-				throw new Error( "Not implemented" );
+				// x: hourFormat("+HH;-HH")
+				// xx or xxxx: hourFormat("+HHmm;-HHmm")
+				// xxx or xxxxx: hourFormat("+HH:mm;-HH:mm")
+				ret = length === 1 ? "+HH;-HH" : ( length % 2 ? "+HH:mm;-HH:mm" : "+HHmm;-HHmm" );
+				ret = dateTimezoneHourFormat( date, ret );
+				break;
 
 			// Anything else is considered a literal, including [ ,:/.'@#], chinese, japonese, and arabic characters.
 			default:
