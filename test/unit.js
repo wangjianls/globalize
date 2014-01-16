@@ -12,6 +12,7 @@ require([
 
 	/* date */
 	"./unit/date/expand-pattern",
+	"./unit/date/timezone/hour-format",
 	"./unit/date/format",
 	"./unit/date/tokenizer",
 	"./unit/date/parse"
